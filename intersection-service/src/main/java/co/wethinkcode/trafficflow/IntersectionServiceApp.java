@@ -1,6 +1,7 @@
 package co.wethinkcode.trafficflow;
 
 import io.javalin.Javalin;
+import co.wethinkcode.trafficflow.mq.MqConfig;
 
 import java.net.URI;
 
@@ -13,6 +14,9 @@ public class IntersectionServiceApp {
                 "INGESTION_SERVICE_URL", DEFAULT_INGESTION_URL);
         IntersectionDirectory directory = new IntersectionDirectory(
                 new IngestionClient(URI.create(ingestionUrl)).fetchIntersections());
+        HeartbeatPublisher heartbeatPublisher = new HeartbeatPublisher(
+                MqConfig.BROKER_URL, MqConfig.HEARTBEAT_QUEUE);
+        heartbeatPublisher.start();
         createApp(directory).start(7021);
     }
 
@@ -38,6 +42,3 @@ public class IntersectionServiceApp {
     record ErrorResponse(String error) {
     }
 }
-
-// MQ TODO: publishes a periodic heartbeat to ActiveMQ queue MqConfig.HEARTBEAT_QUEUE at
-// MqConfig.BROKER_URL (see co.wethinkcode.trafficflow.mq.MqConfig), consumed by intersection-watchdog.
