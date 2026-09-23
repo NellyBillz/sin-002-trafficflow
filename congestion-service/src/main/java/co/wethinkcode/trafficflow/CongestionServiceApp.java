@@ -1,16 +1,18 @@
 package co.wethinkcode.trafficflow;
 
 import io.javalin.Javalin;
+import co.wethinkcode.trafficflow.mq.MqConfig;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CongestionServiceApp {
 
     public static void main(String[] args) {
-        createApp(new AtomicInteger(0)).start(7022);
+        createApp(new AtomicInteger(0), new CongestionPublisher(
+                MqConfig.BROKER_URL, MqConfig.TOPIC)).start(7022);
     }
 
-    static Javalin createApp(AtomicInteger level) {
+    static Javalin createApp(AtomicInteger level, CongestionPublisher publisher) {
         Javalin app = Javalin.create();
         app.get("/health", ctx -> ctx.result("OK"));
         app.get("/congestion", ctx -> ctx.json(new CongestionResponse(level.get())));
@@ -26,7 +28,16 @@ public class CongestionServiceApp {
                 ctx.status(400).json(new ErrorResponse("Level must be between 0 and 8"));
                 return;
             }
-            level.set(request.level());
+            int previous = level.get();
+            if (previous != request.level()) {
+                try {
+                    publisher.publish(request.level());
+                    level.set(request.level());
+                } catch (CongestionPublishException exception) {
+                    ctx.status(503).json(new ErrorResponse("Congestion topic unavailable"));
+                    return;
+                }
+            }
             ctx.json(new CongestionResponse(level.get()));
         });
         return app;
@@ -41,5 +52,3 @@ public class CongestionServiceApp {
     record ErrorResponse(String error) {
     }
 }
-
-// MQ TODO: publishes to ActiveMQ topic MqConfig.TOPIC at MqConfig.BROKER_URL (see co.wethinkcode.trafficflow.mq.MqConfig)

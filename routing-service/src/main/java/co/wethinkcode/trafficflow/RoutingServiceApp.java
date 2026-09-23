@@ -1,24 +1,26 @@
 package co.wethinkcode.trafficflow;
 
 import io.javalin.Javalin;
+import co.wethinkcode.trafficflow.mq.MqConfig;
 
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RoutingServiceApp {
 
     private static final String DEFAULT_INTERSECTION_URL = "http://localhost:7021";
-    private static final String DEFAULT_CONGESTION_URL = "http://localhost:7022";
 
-    public static void main(String[] args) {
-        ServiceClient client = new ServiceClient(
-                URI.create(System.getenv().getOrDefault(
-                        "INTERSECTION_SERVICE_URL", DEFAULT_INTERSECTION_URL)),
-                URI.create(System.getenv().getOrDefault(
-                        "CONGESTION_SERVICE_URL", DEFAULT_CONGESTION_URL)));
-        createApp(client).start(7023);
+    public static void main(String[] args) throws Exception {
+        ServiceClient client = new ServiceClient(URI.create(System.getenv().getOrDefault(
+                "INTERSECTION_SERVICE_URL", DEFAULT_INTERSECTION_URL)));
+        AtomicInteger congestionLevel = new AtomicInteger(0);
+        CongestionSubscriber subscriber = new CongestionSubscriber(
+                MqConfig.BROKER_URL, MqConfig.TOPIC, congestionLevel);
+        subscriber.start();
+        createApp(client, congestionLevel).start(7023);
     }
 
-    static Javalin createApp(ServiceClient client) {
+    static Javalin createApp(ServiceClient client, AtomicInteger congestionLevel) {
         Javalin app = Javalin.create();
         app.get("/health", ctx -> ctx.result("OK"));
         app.get("/route", ctx -> {
@@ -44,7 +46,7 @@ public class RoutingServiceApp {
                     ctx.status(404).json(new ErrorResponse("Unknown route intersection"));
                     return;
                 }
-                int level = client.fetchCongestionLevel();
+                int level = congestionLevel.get();
                 int estimate = (int) Math.ceil(baseMinutes * (1.0 + (level * 0.15)));
                 ctx.json(new RouteEstimate(from.toUpperCase(), to.toUpperCase(), level, estimate));
             } catch (DependencyException exception) {
@@ -61,5 +63,3 @@ public class RoutingServiceApp {
     record ErrorResponse(String error) {
     }
 }
-
-// MQ TODO: subscribes to ActiveMQ topic MqConfig.TOPIC at MqConfig.BROKER_URL (see co.wethinkcode.trafficflow.mq.MqConfig)

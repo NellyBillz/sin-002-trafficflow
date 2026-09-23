@@ -1,8 +1,5 @@
 package co.wethinkcode.trafficflow;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -13,13 +10,10 @@ import java.nio.charset.StandardCharsets;
 public final class ServiceClient {
 
     private final URI intersectionUri;
-    private final URI congestionUri;
     private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ServiceClient(URI intersectionUri, URI congestionUri) {
+    public ServiceClient(URI intersectionUri) {
         this.intersectionUri = intersectionUri;
-        this.congestionUri = congestionUri;
     }
 
     public boolean intersectionExists(String id) {
@@ -38,21 +32,6 @@ public final class ServiceClient {
             throw exception;
         } catch (Exception exception) {
             throw new DependencyException("Intersection service unavailable", exception);
-        }
-    }
-
-    public int fetchCongestionLevel() {
-        try {
-            HttpResponse<String> response = send(congestionUri.resolve("/congestion"));
-            if (response.statusCode() != 200) {
-                throw new DependencyException("Congestion service unavailable", null);
-            }
-            JsonNode body = objectMapper.readTree(response.body());
-            return body.path("level").asInt();
-        } catch (DependencyException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new DependencyException("Congestion service unavailable", exception);
         }
     }
 
